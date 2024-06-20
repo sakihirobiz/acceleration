@@ -71,7 +71,6 @@ void loop()
   M5.Rtc.GetTime(&RTC_TimeStruct);
   M5.IMU.getGyroData(&gyroX, &gyroY, &gyroZ);
   M5.IMU.getAccelData(&accX, &accY, &accZ); // Stores the triaxial accelerometer.
-  M5.IMU.getAhrsData(&pitch, &roll, &yaw);  // Stores the inertial sensor attitude.
   M5.IMU.getTempData(&temp);                // Stores the inertial sensor temperature to temp.
 
   //Title

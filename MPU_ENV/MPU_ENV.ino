@@ -18,6 +18,7 @@ File output_file;
 bool isLogging = true;
 int num = 0;
 int delay_time = 10;
+long int bound_filesize = 50*1024*1024;
 
 // Activities
 int logging = 0; // 0: 'logging', 1: 'stopped'
@@ -126,6 +127,30 @@ void loop()
   num++;
   
   if (logging == 0){
+
+    //1ファイルの上限容量を設ける。
+    if (output_file.size() > bound_filesize) {
+      output_file.close();
+      M5.Lcd.setCursor(240,220);
+      M5.Lcd.printf("restart");
+      // Reopen
+      String filepath = "/imu_data_" + datetime + ".csv";
+      output_file = SD.open(filepath.c_str(), FILE_WRITE);
+      if (!output_file)
+      {
+        M5.Lcd.println("ERROR: OPEN FILE");
+        while (1);
+      }
+      
+      // header
+      output_file.println("num,datetime,accX,accY,accZ,gyroX,gyroY,gyroZ,temp"); // Header  num = 0;
+      num=0;
+
+      M5.Lcd.setCursor(240,220);
+      M5.Lcd.printf("       ");
+
+    }
+
     if (M5.BtnB.wasPressed()){
     
     //save 

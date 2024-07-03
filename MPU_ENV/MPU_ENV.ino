@@ -18,7 +18,8 @@ File output_file;
 bool isLogging = true;
 int num = 0;
 int delay_time = 10;
-long int bound_filesize = 50*1024*1024;
+long int bound_filesize = 5*1024*1024;
+int pin = 33;
 
 // Activities
 int logging = 0; // 0: 'logging', 1: 'stopped'
@@ -48,6 +49,7 @@ void setup()
   M5.Lcd.setTextSize(2);             // Set the font size.
   M5.Rtc.GetDate(&RTC_DateStruct);
   M5.Rtc.GetTime(&RTC_TimeStruct);
+  pinMode(pin, INPUT); // set human sensor
   
   // file open
   String datetime = zeroPadding(RTC_DateStruct.Year, 4) + zeroPadding(RTC_DateStruct.Month, 2) + zeroPadding(RTC_DateStruct.Date, 2) + "-" + zeroPadding(RTC_TimeStruct.Hours, 2) + zeroPadding(RTC_TimeStruct.Minutes, 2) + zeroPadding(RTC_TimeStruct.Seconds, 2);
@@ -59,7 +61,7 @@ void setup()
     while (1)
       ;
   }
-  output_file.println("num,datetime,accX,accY,accZ,gyroX,gyroY,gyroZ,temp"); // Header  num = 0;
+  output_file.println("num,datetime,accX,accY,accZ,gyroX,gyroY,gyroZ,temp,human"); // Header  num = 0;
 }
  
 void loop()
@@ -73,6 +75,11 @@ void loop()
   M5.IMU.getGyroData(&gyroX, &gyroY, &gyroZ);
   M5.IMU.getAccelData(&accX, &accY, &accZ); // Stores the triaxial accelerometer.
   M5.IMU.getTempData(&temp);                // Stores the inertial sensor temperature to temp.
+  
+  // set human sensor 
+  // default -1 , noman 0, man 1
+  int human = -1;
+  human = digitalRead(pin);
 
   //Title
   M5.Lcd.setCursor(left_point,0);
@@ -101,7 +108,11 @@ void loop()
 
   // Temperature
   M5.Lcd.setCursor(left_point,110);
-  M5.Lcd.printf("Temperature : %.2f C", temp);
+  M5.Lcd.printf("T: %.2f C", temp);
+
+  // human sensor
+  M5.Lcd.setCursor(150,110);
+  M5.Lcd.printf("Human: %d ",human);
 
   // gyro
   M5.Lcd.setCursor(left_point,130);
@@ -122,7 +133,7 @@ void loop()
   M5.Lcd.printf("end");
 
   // output to file
-  output_file.printf("%d,%s,%.7e,%.7e,%.7e,%.7e,%.7e,%.7e,%.7e\n",num, datetime.c_str(), accX, accY, accZ, gyroX,gyroY,gyroZ,temp);
+  output_file.printf("%d,%s,%.7e,%.7e,%.7e,%.7e,%.7e,%.7e,%.7e,%d\n",num, datetime.c_str(), accX, accY, accZ, gyroX,gyroY,gyroZ,temp,human);
   output_file.flush();
   num++;
   
@@ -143,7 +154,7 @@ void loop()
       }
       
       // header
-      output_file.println("num,datetime,accX,accY,accZ,gyroX,gyroY,gyroZ,temp"); // Header  num = 0;
+      output_file.println("num,datetime,accX,accY,accZ,gyroX,gyroY,gyroZ,temp,human"); // Header  num = 0;
       num=0;
 
       M5.Lcd.setCursor(240,220);
@@ -183,7 +194,7 @@ void loop()
       }
       
       // header
-      output_file.println("num,datetime,accX,accY,accZ,gyroX,gyroY,gyroZ,temp"); // Header  num = 0;
+      output_file.println("num,datetime,accX,accY,accZ,gyroX,gyroY,gyroZ,temp,human"); // Header  num = 0;
       num=0;
 
       // status update

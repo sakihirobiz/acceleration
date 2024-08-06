@@ -1,6 +1,9 @@
 #include <M5Core2.h>
 #include <map>
- 
+#include "BluetoothSerial.h"
+
+BluetoothSerial SerialBT;
+
 float accX = 0.0F; // Define variables for storing inertial sensor data
 float accY = 0.0F;
 float accZ = 0.0F;
@@ -14,7 +17,6 @@ float temp = 0.0F;
 // RTC
 RTC_DateTypeDef RTC_DateStruct; // Data
 RTC_TimeTypeDef RTC_TimeStruct; // Time
-File output_file;
 bool isLogging = true;
 int num = 0;
 int delay_time = 10;
@@ -28,6 +30,16 @@ std::map<int, std::string> loggingStatus;
 // LCD Setting
 int left_point = 0;
 
+File output_file; // グローバル変数として定義
+
+
+//header
+String header = "num,datetime,accX,accY,accZ,gyroX,gyroY,gyroZ,temp";
+
+//
+String BluetoothName = "ACC SENSOR 1";
+
+
 String zeroPadding(int num, int cnt)
 {
   char tmp[256];
@@ -35,9 +47,72 @@ String zeroPadding(int num, int cnt)
   sprintf(tmp, prm, num);
   return tmp;
 }
- 
+
+void printStringDetails(const String &str) {
+    Serial.printf("String: '%s', Length: %d\n", str.c_str(), str.length());
+    Serial.print("ASCII Codes: ");
+    for (size_t i = 0; i < str.length(); i++) {
+        Serial.printf("%d ", str.charAt(i));
+    }
+    Serial.println();
+}
+
+void listRootFiles(fs::FS &fs, const String &currentDate, int *fileCount, float *totalSizeKB) {
+    File root = fs.open("/");
+    if (!root) {
+        Serial.println("Failed to open root directory");
+        return;
+    }
+    if (!root.isDirectory()) {
+        Serial.println("Not a directory");
+        return;
+    }
+
+    *fileCount = 0;
+    *totalSizeKB = 0.0;
+
+    File file = root.openNextFile();
+    while (file) {
+        if (!file.isDirectory()) {
+            String fileName = file.name();
+            if (fileName.startsWith("imu_data_") && fileName.endsWith(".csv")) {
+                String fileDate = fileName.substring(9, 17);
+                Serial.printf("File: %s, Date: %s  receive %s\n", fileName.c_str(), fileDate.c_str(),currentDate.c_str());
+                printStringDetails(fileDate);
+                printStringDetails(currentDate.substring(0,8));
+                // Serial.printf(%d\n Total size: %.2f KB,fileCount,)
+                if (fileDate.equals(currentDate.substring(0,8))) {
+                    Serial.printf("INNNN: %d \n", file.size());
+                    (*fileCount)++;
+                    *totalSizeKB += file.size() / 1024.0;
+                }
+            }
+        }
+        file = root.openNextFile();
+    }
+}
+
+File createOutputFile(String datetime) {
+    String filepath = "/imu_data_" + datetime + ".csv";
+    // File output_file = SD.open(filepath.c_str(), FILE_WRITE);
+    output_file = SD.open(filepath.c_str(), FILE_WRITE);
+    
+    if (!output_file) {
+        M5.Lcd.println("ERROR: OPEN FILE");
+        while (1); // 無限ループで停止
+    }
+    
+    // header
+    output_file.printf("%s\n",header.c_str());
+    return output_file;
+}
+
+
 void setup()
 {
+
+  SerialBT.begin(BluetoothName);
+
   // Activity Name
   loggingStatus[0] = "logging";
   loggingStatus[1] = "stopped";
@@ -49,26 +124,43 @@ void setup()
   M5.Lcd.setTextSize(2);             // Set the font size.
   M5.Rtc.GetDate(&RTC_DateStruct);
   M5.Rtc.GetTime(&RTC_TimeStruct);
-  pinMode(pin, INPUT); // set human sensor
+  // pinMode(pin, INPUT); // set human sensor
   
   // file open
   String datetime = zeroPadding(RTC_DateStruct.Year, 4) + zeroPadding(RTC_DateStruct.Month, 2) + zeroPadding(RTC_DateStruct.Date, 2) + "-" + zeroPadding(RTC_TimeStruct.Hours, 2) + zeroPadding(RTC_TimeStruct.Minutes, 2) + zeroPadding(RTC_TimeStruct.Seconds, 2);
-  String filepath = "/imu_data_" + datetime + ".csv";
-  output_file = SD.open(filepath.c_str(), FILE_WRITE);
-  if (!output_file)
-  {
-    M5.Lcd.println("ERROR: OPEN FILE");
-    while (1)
-      ;
-  }
-  output_file.println("num,datetime,accX,accY,accZ,gyroX,gyroY,gyroZ,temp,human"); // Header  num = 0;
+  createOutputFile(datetime);
 }
  
 void loop()
 {
   // Update
   M5.update();
-  
+  // begin initialization
+
+  //bluetooth
+  if (SerialBT.available()) {
+    String receiveData = SerialBT.readStringUntil(';');
+    Serial.print(receiveData);
+    
+    int fileCount;
+    float totalSizeKB;
+    
+
+    // ファイル一覧とサイズを取得
+    if (receiveData.length()>7){
+      listRootFiles(SD, receiveData, &fileCount, &totalSizeKB);
+      Serial.printf("Total files with today's date (%s): %d\n Total size: %.2f KB\n", receiveData.c_str(), fileCount, totalSizeKB);
+      String message = "Total files with today's date (" + receiveData + "): " + String(fileCount) + "\n" +
+                   "Total size: " + String(totalSizeKB, 2) + " KB\n";
+      SerialBT.print(message);
+    }else{
+      Serial.printf("Length Error");
+      String message = "send Message format YYYYMMDD";
+      SerialBT.print(message);
+      
+    }
+
+  }
   // Stores the triaxial gyroscope data of the inertial sensor to the relevant variable
   M5.Rtc.GetDate(&RTC_DateStruct);
   M5.Rtc.GetTime(&RTC_TimeStruct);
@@ -78,12 +170,12 @@ void loop()
   
   // set human sensor 
   // default -1 , noman 0, man 1
-  int human = -1;
-  human = digitalRead(pin);
+  // int human = -1;
+  // human = digitalRead(pin);
 
   //Title
   M5.Lcd.setCursor(left_point,0);
-  M5.Lcd.printf("Accerelation Sensor");
+  M5.Lcd.printf("%s",BluetoothName.c_str());
 
   //Date
   String datetime = zeroPadding(RTC_DateStruct.Year, 4) + zeroPadding(RTC_DateStruct.Month, 2) + zeroPadding(RTC_DateStruct.Date, 2) + "-" + zeroPadding(RTC_TimeStruct.Hours, 2) + zeroPadding(RTC_TimeStruct.Minutes, 2) + zeroPadding(RTC_TimeStruct.Seconds, 2);
@@ -111,8 +203,8 @@ void loop()
   M5.Lcd.printf("T: %.2f C", temp);
 
   // human sensor
-  M5.Lcd.setCursor(150,110);
-  M5.Lcd.printf("Human: %d ",human);
+  // M5.Lcd.setCursor(150,110);
+  // M5.Lcd.printf("Human: %d ",human);
 
   // gyro
   M5.Lcd.setCursor(left_point,130);
@@ -133,7 +225,7 @@ void loop()
   M5.Lcd.printf("end");
 
   // output to file
-  output_file.printf("%d,%s,%.7e,%.7e,%.7e,%.7e,%.7e,%.7e,%.7e,%d\n",num, datetime.c_str(), accX, accY, accZ, gyroX,gyroY,gyroZ,temp,human);
+  output_file.printf("%d,%s,%.7e,%.7e,%.7e,%.7e,%.7e,%.7e,%.7e\n",num, datetime.c_str(), accX, accY, accZ, gyroX,gyroY,gyroZ,temp);
   output_file.flush();
   num++;
   
@@ -146,15 +238,7 @@ void loop()
       M5.Lcd.printf("restart");
       // Reopen
       String filepath = "/imu_data_" + datetime + ".csv";
-      output_file = SD.open(filepath.c_str(), FILE_WRITE);
-      if (!output_file)
-      {
-        M5.Lcd.println("ERROR: OPEN FILE");
-        while (1);
-      }
-      
-      // header
-      output_file.println("num,datetime,accX,accY,accZ,gyroX,gyroY,gyroZ,temp,human"); // Header  num = 0;
+      createOutputFile(datetime);
       num=0;
 
       M5.Lcd.setCursor(240,220);
@@ -186,20 +270,12 @@ void loop()
       M5.Lcd.printf("       ");
       // Reopen
       String filepath = "/imu_data_" + datetime + ".csv";
-      output_file = SD.open(filepath.c_str(), FILE_WRITE);
-      if (!output_file)
-      {
-        M5.Lcd.println("ERROR: OPEN FILE");
-        while (1);
-      }
-      
-      // header
-      output_file.println("num,datetime,accX,accY,accZ,gyroX,gyroY,gyroZ,temp,human"); // Header  num = 0;
+      createOutputFile(datetime);
       num=0;
 
       // status update
       logging = 0;
     }
   }
-  delay(delay_time); // Delay 10ms.
+  delay(delay_time); 
 }
